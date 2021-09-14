@@ -1,0 +1,102 @@
+service: serverless-perfsys-test
+
+plugins:
+  - serverless-python-requirements
+provider:
+  name: aws
+  logs:
+    restApi: true
+  runtime: python3.7
+  stage: dev
+  region: us-east-1
+  environment:
+    S3_MAPPING_TABLE: 'pst-s3-mapping-table'
+    MASTER_IMAGE_TABLE: 'pst-master-image-table'
+    IMAGE_LABELLING_BUCKET: 'pst-image-labelling-bucket'
+    REGION_NAME: 'us-east-1'
+
+  iamRoleStatements:
+    - Effect: Allow
+      Action:
+        - s3:*
+      Resource: "arn:aws:s3:::${self:provider.environment.IMAGE_LABELLING_BUCKET}/*"
+    - Effect: Allow
+      Action:
+        - dynamodb:Query
+        - dynamodb:Scan
+        - dynamodb:GetItem
+        - dynamodb:PutItem
+        - dynamodb:UpdateItem
+        - dynamodb:DeleteItem
+      Resource: "arn:aws:dynamodb:${opt:region, self:provider.region}:*:table/${self:provider.environment.S3_MAPPING_TABLE}"
+    - Effect: Allow
+      Action:
+        - dynamodb:Query
+        - dynamodb:Scan
+        - dynamodb:GetItem
+        - dynamodb:PutItem
+        - dynamodb:UpdateItem
+        - dynamodb:DeleteItem
+      Resource: "arn:aws:dynamodb:${opt:region, self:provider.region}:*:table/${self:provider.environment.MASTER_IMAGE_TABLE}"
+    - Effect: "Allow"
+      Action:
+        - "rekognition:*"
+      Resource: "*"
+
+functions:
+  labelOnS3Upload:
+    handler: handlers/S3UploadHandler.labelOnS3Upload
+    events:
+      - s3:
+          bucket: ${self:provider.environment.IMAGE_LABELLING_BUCKET}
+          event: s3:ObjectCreated:Put
+          existing: true
+  getBlobDetails:
+    handler: handlers/getImagesHandler.getBlobDetails
+    events:
+      - http:
+          path: blobs/{imageID}
+          method: get
+          cors: true
+  getPutURL:
+    handler: handlers/presignedURLs.get_upload_url
+    events:
+      - http:
+          path: blobs
+          method: post
+          cors: true
+
+resources:
+  Resources:
+    MasterImageTable:
+      Type: AWS::DynamoDB::Table
+      DeletionPolicy: Retain
+      Properties:
+        KeySchema:
+          - AttributeName: imageID
+            KeyType: HASH
+        AttributeDefinitions:
+          - AttributeName: imageID
+            AttributeType: S
+        ProvisionedThroughput:
+          ReadCapacityUnits: 5
+          WriteCapacityUnits: 5
+        TableName: pst-master-image-table
+    S3MappingTable:
+      Type: AWS::DynamoDB::Table
+      DeletionPolicy: Retain
+      Properties:
+        KeySchema:
+          - AttributeName: label
+            KeyType: HASH
+        AttributeDefinitions:
+          - AttributeName: label
+            AttributeType: S
+        ProvisionedThroughput:
+          ReadCapacityUnits: 5
+          WriteCapacityUnits: 5
+        TableName: pst-s3-mapping-table
+    ImageLabellingBucket:
+      Type: AWS::S3::Bucket
+      Properties:
+        BucketName: pst-image-labelling-bucket
