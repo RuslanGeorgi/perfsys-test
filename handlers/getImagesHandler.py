@@ -27,7 +27,7 @@ def getBlobDetails(event, context):
         
         response = {
             "statusCode": 404,
-            "body": json.dumps({'error_message': 'not found'})
+            "body": json.dumps({'description': 'Blob not found'})
         }
     
     return response
