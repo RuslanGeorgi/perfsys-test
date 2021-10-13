@@ -2,6 +2,8 @@ import json
 import boto3
 import os
 import uuid
+import requests
+        
 
 def labelOnS3Upload(event, context):
     bucket = os.environ['IMAGE_LABELLING_BUCKET']
@@ -27,7 +29,8 @@ def labelOnS3Upload(event, context):
 
     addToLabelMappingTableResponse = addToLabelMappingTable(dynamodb=dynamodb, imageID=fileName, fileName=fileName,
                                                             imageLabels=imageLabels)
-
+    
+    
     s3HandlerResponseBody = {
         "addImageDataToMasterTableResponse": addToLabelMappingTableResponse,
         "addToLabelMappingTableResponse": addToLabelMappingTableResponse
@@ -43,15 +46,30 @@ def labelOnS3Upload(event, context):
 
 def addImageDataToMasterTable(dynamodb, imageID, fileName, labels):
     masterImageTable = dynamodb.Table(os.environ['MASTER_IMAGE_TABLE'])
-    item = {
-                'imageID': imageID,
-                'fileName': fileName,
-                'labels': labels
-    }
+    # item = {
+                # 'imageID': imageID,
+                # 'fileName': fileName,
+                # 'labels': labels
+    # }
 
     # add image data to master MASTER_IMAGE_TABLE
-    masterImageTable.put_item(Item=item)
+    masterImageTable.update_item(
+    Key={'imageID': imageID},
+    AttributeUpdates={
+        'fileName': {'Action': 'PUT', 'Value': fileName},
+        'labels': {'Action': 'PUT', 'Value': labels}
+    }
+    )
+    
+    # testing requests
+    item = masterImageTable.get_item(
+        Key={'imageID': imageID}
+    )
 
+    url = item['Item']['callback_url']
+    myobj = json.dumps(item['Item'])
+    requests.post(url, data = myobj)
+    
     response = {
         "statusCode": 200,
         "body": json.dumps(item)

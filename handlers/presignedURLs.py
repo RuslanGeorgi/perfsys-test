@@ -6,6 +6,18 @@ import re
 
 s3 = boto3.client('s3')
 
+def add_to_table(blobID, callback_url):
+    region_name = os.environ['REGION_NAME']
+    dynamodb = boto3.resource('dynamodb', region_name=region_name)
+    masterImageTable = dynamodb.Table(os.environ['MASTER_IMAGE_TABLE'])
+    
+    item = {
+                'imageID': blobID,
+                'callback_url': callback_url
+    }
+
+    masterImageTable.put_item(Item=item)
+
 def validate_url(url):
     regex = re.compile(
         r'^(?:http|ftp)s?://' # http:// or https://
@@ -28,6 +40,9 @@ def get_upload_url(event, context):
     callback_url = event_parsed['callback_url']
     
     if validate_url(callback_url):
+        
+        add_to_table(blobID, callback_url)
+        
         response = {
         "statusCode": 201,
         "body": json.dumps({"URL": put_url, "blobID": blobID, "callback_url": callback_url})
